@@ -6,8 +6,9 @@ from collections.abc import Callable
 from datetime import timedelta
 import logging
 
-from ariston.ariston_api import ConnectionException
+from ariston.ariston_api import AristonAPI, ConnectionException
 from ariston.base_device import AristonBaseDevice
+from ariston.const import ARISTON_DATA_ITEMS, ARISTON_REMOTE, DeviceFeatures, ZoneAttribute
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -45,3 +46,67 @@ class DeviceDataUpdateCoordinator(DataUpdateCoordinator):
             await self._async_update_state()
         except ConnectionException as error:
             raise UpdateFailed(f"Ariston cloud error: {error}") from error
+
+
+def drop_hidden_zones(device: AristonBaseDevice) -> None:
+    """Forget zones the app hides: no phantom thermostats, smaller requests."""
+    zones = device.features.get(DeviceFeatures.ZONES)
+    if isinstance(zones, list):
+        device.features[DeviceFeatures.ZONES] = [
+            zone for zone in zones if not zone.get(ZoneAttribute.IS_HIDDEN)
+        ]
+
+
+PROPERTIES_CHUNK_SIZE = 2
+
+
+def use_chunked_properties_fallback(api: AristonAPI) -> None:
+    """Retry dataItems in small chunks when the batched request answers 500.
+
+    Some gateways (GALEVO, Cube S Net) fail with "Gateway error ... InternalError"
+    when asked for many datapoints at once, while 1-2 items per request work and
+    items that fail live work from the cloud cache (fustom issue 492).
+    """
+    batched = api.async_get_properties
+
+    async def async_get_properties(gw_id, features, culture, umsys):
+        try:
+            return await batched(gw_id, features, culture, umsys)
+        except ConnectionException as error:
+            if error.args[:1] != (500,):
+                raise
+            _LOGGER.debug("Batched dataItems answered 500, retrying in chunks")
+
+        # ponytail: library private attribute; ariston is pinned in manifest.json
+        url = (
+            f"{api._AristonAPI__api_url}{ARISTON_REMOTE}/{ARISTON_DATA_ITEMS}"
+            f"/{gw_id}/get?umsys={umsys}"
+        )
+
+        async def post(items, use_cache):
+            body = {"useCache": use_cache, "items": items,
+                    "features": features, "culture": culture}
+            try:
+                return ((await api._async_post(url, body)) or {}).get("items")
+            except ConnectionException:
+                return None
+
+        result: list = []
+        all_items = api.get_items(features)
+        for start in range(0, len(all_items), PROPERTIES_CHUNK_SIZE):
+            chunk = all_items[start : start + PROPERTIES_CHUNK_SIZE]
+            items = await post(chunk, False)
+            if items is None:
+                items = []
+                for item in chunk:
+                    single = (await post([item], False) if len(chunk) > 1 else None)
+                    if single is None:
+                        single = await post([item], True)
+                    items.extend(single or [])
+            result.extend(items)
+
+        if not result:
+            raise ConnectionException(500)
+        return {"items": result}
+
+    api.async_get_properties = async_get_properties

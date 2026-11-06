@@ -59,6 +59,13 @@ BUS_ERRORS_SCAN_INTERVAL: Final[str] = "bus_errors_scan_interval"
 API_URL_SETTING: Final[str] = "api_url_setting"
 API_USER_AGENT: Final[str] = "api_user_agent"
 
+# Never shown in diagnostics or logs. gw/sn identify the gateway, loc/geofenceConfig
+# locate the home, name is the user-chosen plant (often an address), token/act are
+# the session token and account (name, e-mail, phone) from the login response.
+REDACT_KEYS: Final[set[str]] = {
+    "username", "password", "token", "act", "gw", "sn", "loc", "geofenceConfig", "name",
+}
+
 DEFAULT_SCAN_INTERVAL_SECONDS: Final[int] = 180
 DEFAULT_ENERGY_SCAN_INTERVAL_MINUTES: Final[int] = 60
 DEFAULT_BUS_ERRORS_SCAN_INTERVAL_SECONDS: Final[int] = 600

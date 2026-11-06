@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import logging
+import re
+from collections.abc import Mapping
 
 import voluptuous as vol
 
 from ariston import Ariston, DeviceAttribute, SystemType
 from ariston.const import ARISTON_API_URL, ARISTON_USER_AGENT
+from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_DEVICE_ID,
@@ -34,10 +37,38 @@ from .const import (
     DOMAIN,
     ENERGY_COORDINATOR,
     ENERGY_SCAN_INTERVAL,
+    REDACT_KEYS,
 )
-from .coordinator import DeviceDataUpdateCoordinator
+from .coordinator import (
+    DeviceDataUpdateCoordinator,
+    drop_hidden_zones,
+    use_chunked_properties_fallback,
+)
 
 _LOGGER = logging.getLogger(__name__)
+
+GATEWAY_IN_URL = re.compile(r"/[0-9A-F]{12}(?=[/?]|$)")
+
+
+def _redact_log_arg(arg):
+    if isinstance(arg, str):
+        return GATEWAY_IN_URL.sub("/**REDACTED**", arg)
+    return async_redact_data(arg, REDACT_KEYS)
+
+
+class _RedactAristonApiLog(logging.Filter):
+    """The ariston library debug-logs the login response (token, e-mail, phone)
+    and plant data (address, GPS); keep that out of Home Assistant logs."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, Mapping):
+            record.args = _redact_log_arg(record.args)
+        elif record.args:
+            record.args = tuple(_redact_log_arg(arg) for arg in record.args)
+        return True
+
+
+logging.getLogger("ariston.ariston_api").addFilter(_RedactAristonApiLog())
 
 PLATFORMS: list[str] = [
     Platform.BINARY_SENSOR,
@@ -93,6 +124,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             return False
 
         await device.async_get_features()
+        drop_hidden_zones(device)
+        use_chunked_properties_fallback(device.api)
 
         scan_interval_seconds = entry.options.get(
             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_SECONDS

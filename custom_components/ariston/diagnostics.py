@@ -6,14 +6,9 @@ from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
-from .const import COORDINATOR, DOMAIN
-
-# gw/sn identify the gateway, loc/geofenceConfig locate the home, name is the
-# user-chosen plant (often an address).
-TO_REDACT = {CONF_USERNAME, CONF_PASSWORD, "gw", "sn", "loc", "geofenceConfig", "name"}
+from .const import COORDINATOR, DOMAIN, REDACT_KEYS
 
 
 async def async_get_config_entry_diagnostics(
@@ -32,5 +27,5 @@ async def async_get_config_entry_diagnostics(
             "menu_items": getattr(device, "menu_items", None),
             "bus_errors": device.bus_errors,
         },
-        TO_REDACT,
+        REDACT_KEYS,
     )

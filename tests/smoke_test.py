@@ -5,6 +5,7 @@ with the cloud API mocked (busErrors and energy endpoints answer HTTP 500),
 then checks entities and a write.
 
 Run:  python tests/smoke_test.py   (inside a venv with homeassistant + ariston)
+Scenarios: normal, and flaky (batched dataItems answers 500, hidden zone).
 """
 
 import asyncio
@@ -15,7 +16,7 @@ import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import homeassistant  # noqa: F401  (must be imported before anything pulls in httpx)
-from ariston.ariston_api import ConnectionException
+from ariston.ariston_api import AristonAPI, ConnectionException
 from ariston.const import (
     DeviceAttribute,
     DeviceFeatures,
@@ -42,10 +43,10 @@ def _item(id_, value, zone=0, **kw):
             "min": 35, "max": 60, "step": 1, **kw}
 
 
-def _api():
+def _api(flaky_gateway: bool):
     api = AsyncMock()
     api.async_get_features_for_device.return_value = {
-        DeviceFeatures.ZONES: [{"num": 1}],
+        DeviceFeatures.ZONES: [{"num": 1}, {"num": 2, "isHidden": True}],
         DeviceFeatures.HAS_BOILER: True,
         DeviceFeatures.HAS_METERING: True,
     }
@@ -60,6 +61,24 @@ def _api():
         _item(ThermostatProperties.ZONE_MODE, 2, zone=1, options=[0, 1, 2],
               optTexts=["Off", "Time", "Manual"]),
     ]}
+    if flaky_gateway:
+        # Cloud behaviour from fustom issue 492: big batches fail, PlantMode only
+        # comes through from the cache.
+        known = api.async_get_properties.return_value["items"]
+        api.async_get_properties.side_effect = ConnectionException(500)
+        api._AristonAPI__api_url = "https://example.invalid/api/v2/"
+        api.get_items = AristonAPI.get_items
+
+        async def post(url, body):
+            ids = [(i["id"], i["zn"]) for i in body["items"]]
+            assert all(zn != 2 for _, zn in ids), "hidden zone requested"
+            if len(ids) > 2 or (
+                (DeviceProperties.PLANT_MODE, 0) in ids and not body["useCache"]
+            ):
+                raise ConnectionException(500)
+            return {"items": [i for i in known if (i["id"], i["zone"]) in ids]}
+
+        api._async_post.side_effect = post
     api.async_get_menu_items.return_value = []
     for name in ("async_get_bus_errors", "async_get_consumptions_settings",
                  "async_get_energy_account", "async_get_consumptions_sequences"):
@@ -78,7 +97,7 @@ class _Logs(logging.Handler):
             self.records.append(f"{record.levelname} {record.name}: {msg}")
 
 
-async def main():
+async def main(flaky_gateway: bool):
     config_dir = tempfile.mkdtemp()
     os.makedirs(f"{config_dir}/custom_components")
     os.symlink(f"{REPO}/custom_components/ariston",
@@ -90,7 +109,7 @@ async def main():
     import custom_components.ariston as integration
     import custom_components.ariston.config_flow as flow
 
-    device = AristonGalevoDevice(_api(), ATTRS)
+    device = AristonGalevoDevice(_api(flaky_gateway), ATTRS)
     cloud = MagicMock()
     cloud.async_connect = AsyncMock(return_value=True)
     cloud.async_discover = AsyncMock(return_value=[ATTRS])
@@ -119,6 +138,8 @@ async def main():
 
         climate = hass.states.get("climate.mira")
         assert climate, sorted(hass.states.async_entity_ids())
+        assert len(hass.states.async_entity_ids("climate")) == 1, "hidden zone shown"
+        assert climate.attributes["preset_mode"] == "Winter", climate
         assert climate.attributes["current_temperature"] == 20.5, climate
         assert climate.attributes["temperature"] == 21, climate
 
@@ -145,6 +166,21 @@ async def main():
         import json
         assert "password" not in json.dumps(diag)  # serialisable, no credentials
 
+        # The library debug-logs the login response; it must come out redacted.
+        api_log = logging.getLogger("ariston.ariston_api")
+        seen = []
+        catcher = logging.Handler()
+        catcher.emit = lambda record: seen.append(record.getMessage())
+        api_log.addHandler(catcher)
+        api_log.setLevel(logging.DEBUG)
+        api_log.debug("Response %s", {"token": "SECRET", "act": {"Email": "a@b.c"}})
+        api_log.debug("Response %s", [{"gw": "F0AD4E000000", "loc": {"addr": "x"}}])
+        api_log.debug("Request method %s, path: %s, params: %s", "GET",
+                      "https://h/api/v2/remote/plants/F0AD4E000000/features", None)
+        api_log.removeHandler(catcher)
+        leaked = [m for m in seen if any(s in m for s in ("SECRET", "a@b.c", "F0AD4E000000", "addr"))]
+        assert not leaked and len(seen) == 3, seen
+
         assert await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_stop()
 
@@ -153,16 +189,20 @@ async def main():
            or (r.startswith(("ERROR", "CRITICAL")) and "Ariston cloud error" not in r)]
     assert not bad, "\n".join(bad)
     print = lambda *a: sys.__stdout__.write(" ".join(map(str, a)) + "\n")  # noqa: A001
-    print(f"OK - {len(hass.states.async_entity_ids())} entities; "
+    print(f"OK flaky_gateway={flaky_gateway} - {len(hass.states.async_entity_ids())} entities; "
           f"ariston warnings: {len(ours)}")
     for r in ours:
         print("  warn:", r.splitlines()[0][:200])
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 1:  # HA boots once per process: one run per scenario
+        import subprocess
+        sys.exit(max(subprocess.call([sys.executable, __file__, flag])
+                     for flag in ("normal", "flaky")))
     # HA's logging setup swallows stderr, so report through the real stdout.
     try:
-        asyncio.run(main())
+        asyncio.run(main(flaky_gateway=sys.argv[1] == "flaky"))
     except BaseException:
         import traceback
         sys.__stdout__.write(traceback.format_exc())

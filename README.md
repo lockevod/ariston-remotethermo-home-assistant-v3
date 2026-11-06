@@ -11,6 +11,14 @@ Changes in 0.20.0:
 - Setup no longer fails when the cloud answers HTTP 500 on the `busErrors` or
   energy endpoints (upstream issues 497, 503, 509). Those sensors stay unavailable
   until the endpoint recovers; climate and hot water work normally.
+- When the gateway answers HTTP 500 to the batched data request ("Gateway
+  error ... InternalError", upstream issue 492, seen on GALEVO / Chaffolink),
+  data is fetched in small chunks instead, and items that fail live are read
+  from the cloud cache. Slower (about a minute per refresh) but it works.
+- Zones the app hides (`isHidden`) are ignored: no phantom thermostats and a
+  smaller data request.
+- Debug logs no longer contain the session token, account details (name,
+  e-mail, phone), address/GPS or gateway serial that the ariston library logs.
 - Cloud errors during polling are reported once as a normal "unavailable"
   warning instead of a traceback on every poll.
 - Climate and water heater provide the `native_*` temperature API of
