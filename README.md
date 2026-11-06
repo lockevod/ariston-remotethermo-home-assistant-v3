@@ -22,6 +22,10 @@ Changes in 0.20.0:
 - Heating can be switched off from the thermostat even when the zone has no
   "Off" mode: Off sets the plant to Summer (hot water stays on). New
   "plant mode" select (Summer / Winter / OFF) to switch the boiler itself.
+- New "central heating" switch (on = Winter, off = Summer, hot water stays
+  on). Use it as the heater of Home Assistant's Generic Thermostat helper with
+  any room temperature sensor (e.g. Tado) when no wired thermostat drives the
+  boiler.
 - Zones without a room sensor show no current temperature instead of 0 °C.
 - Cloud errors during polling are reported once as a normal "unavailable"
   warning instead of a traceback on every poll.

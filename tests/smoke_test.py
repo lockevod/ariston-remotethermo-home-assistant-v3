@@ -188,6 +188,17 @@ async def main(flaky_gateway: bool):
         assert device.plant_mode.value == 5
         assert hass.states.get("climate.mira").state == "off"
 
+        # Central heating switch = what generic_thermostat drives.
+        heating = [s for s in hass.states.async_all("switch") if "central_heating" in s.entity_id]
+        assert heating and heating[0].state == "off", heating  # plant is OFF here
+        await hass.services.async_call(
+            "switch", "turn_on", {"entity_id": heating[0].entity_id}, blocking=True)
+        assert device.plant_mode.value == 1 and hass.states.get(heating[0].entity_id).state == "on"
+        await hass.services.async_call(
+            "switch", "turn_off", {"entity_id": heating[0].entity_id}, blocking=True)
+        assert device.plant_mode.value == 0, "off must keep hot water (Summer)"
+        assert hass.states.get("climate.mira").state == "off"
+
         # The library debug-logs the login response; it must come out redacted.
         api_log = logging.getLogger("ariston.ariston_api")
         seen = []

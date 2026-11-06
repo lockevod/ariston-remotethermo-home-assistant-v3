@@ -20,6 +20,7 @@ from .const import (
     DOMAIN,
     NAME,
     AristonClimateEntityDescription,
+    heating_off_plant_mode,
 )
 from .coordinator import DeviceDataUpdateCoordinator
 from .entity import AristonEntity
@@ -227,14 +228,10 @@ class AristonThermostat(AristonEntity, ClimateEntity):
             current_plant_mode = self.device.plant_mode
 
             if hvac_mode == HVACMode.OFF:
-                # Heating off. Keep hot water (Summer) when the boiler makes DHW;
-                # the full OFF stays available as a preset / plant mode.
-                if (
-                    self.device.has_dhw and PlantMode.SUMMER.value in plant_modes
-                ) or not self.device.is_plant_mode_options_contains_off:
-                    await self.device.async_set_plant_mode(PlantMode.SUMMER)
-                else:
-                    await self.device.async_set_plant_mode(PlantMode.OFF)
+                # Heating off; Summer keeps hot water. Full OFF: plant mode select.
+                await self.device.async_set_plant_mode(
+                    heating_off_plant_mode(self.device)
+                )
             elif hvac_mode == HVACMode.AUTO:
                 if current_plant_mode in [
                     PlantMode.WINTER,

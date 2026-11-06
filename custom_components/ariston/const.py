@@ -82,6 +82,29 @@ EXTRA_STATE_ATTRIBUTE: Final[str] = "Attribute"
 EXTRA_STATE_DEVICE_METHOD: Final[str] = "DeviceMethod"
 
 
+def heating_off_plant_mode(device: Any) -> PlantMode:
+    """Plant mode that stops central heating: Summer keeps hot water running."""
+    options = device.plant_mode_options or []
+    if PlantMode.SUMMER.value in options and (
+        device.has_dhw or PlantMode.OFF.value not in options
+    ):
+        return PlantMode.SUMMER
+    return PlantMode.OFF
+
+
+async def async_set_heating(device: Any, on: bool) -> None:
+    """Enable/disable central heating via the plant mode (Winter / Summer)."""
+    if not on:
+        await device.async_set_plant_mode(heating_off_plant_mode(device))
+    elif not device.is_plant_in_heat_mode:
+        options = device.plant_mode_options or []
+        await device.async_set_plant_mode(
+            PlantMode.WINTER
+            if PlantMode.WINTER.value in options or not options
+            else PlantMode.HEATING_ONLY
+        )
+
+
 @dataclass(kw_only=True, frozen=True)
 class AristonBaseEntityDescription(EntityDescription):
     """An abstract class that describes Ariston entites."""
@@ -626,6 +649,16 @@ ARISTON_BINARY_SENSOR_TYPES: list[AristonBinarySensorEntityDescription] = [
 ]
 
 ARISTON_SWITCH_TYPES: list[AristonSwitchEntityDescription] = [
+    AristonSwitchEntityDescription(
+        # Lets HA act as the room thermostat (e.g. generic_thermostat with any
+        # temperature sensor) when no wired thermostat drives the boiler.
+        key="CentralHeating",
+        name=f"{NAME} central heating",
+        icon="mdi:radiator",
+        set_value=lambda entity, value: async_set_heating(entity.device, value),
+        get_is_on=lambda entity: entity.device.is_plant_in_heat_mode,
+        system_types=[SystemType.GALEVO],
+    ),
     AristonSwitchEntityDescription(
         key=DeviceProperties.AUTOMATIC_THERMOREGULATION,
         name=f"{NAME} automatic thermoregulation",
