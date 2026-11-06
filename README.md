@@ -26,7 +26,9 @@ Changes in 0.20.0:
   on). Use it as the heater of Home Assistant's Generic Thermostat helper with
   any room temperature sensor (e.g. Tado) when no wired thermostat drives the
   boiler.
-- Zones without a room sensor show no current temperature instead of 0 °C.
+- Zones without a room sensor: the thermostat shows and sets the central
+  heating flow temperature (like the boiler's CH knob) instead of a room
+  setpoint that does nothing; current temperature is the actual flow temp.
 - Cloud errors during polling are reported once as a normal "unavailable"
   warning instead of a traceback on every poll.
 - Climate and water heater provide the `native_*` temperature API of

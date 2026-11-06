@@ -57,6 +57,8 @@ def _api(flaky_gateway: bool):
               optTexts=["Summer", "Winter", "OFF"]),
         _item(ThermostatProperties.ZONE_MEASURED_TEMP, 0.0, zone=1),  # no room sensor
         _item(ThermostatProperties.ZONE_DESIRED_TEMP, 21, zone=1),
+        _item(DeviceProperties.CH_FLOW_TEMP, 29, decimals=0),
+        _item(ThermostatProperties.HEATING_FLOW_TEMP, 60, zone=1, min=35, max=82, decimals=0),
         _item(ThermostatProperties.ZONE_COMFORT_TEMP, 21, zone=1, min=10, max=30),
         # Real Chaffoteaux Mira Link: no "Off" zone mode
         _item(ThermostatProperties.ZONE_MODE, 2, zone=1, options=[2, 3],
@@ -141,9 +143,11 @@ async def main(flaky_gateway: bool):
         assert climate, sorted(hass.states.async_entity_ids())
         assert len(hass.states.async_entity_ids("climate")) == 1, "hidden zone shown"
         assert climate.attributes["preset_mode"] == "Winter", climate
-        assert climate.attributes["current_temperature"] is None, climate
+        # No room sensor: the thermostat shows/sets the CH flow temperature.
+        assert climate.attributes["current_temperature"] == 29, climate
+        assert climate.attributes["temperature"] == 60, climate
+        assert climate.attributes["max_temp"] == 82, climate
         assert "off" in climate.attributes["hvac_modes"], climate
-        assert climate.attributes["temperature"] == 21, climate
 
         wh = hass.states.get("water_heater.mira")
         assert wh and wh.attributes["temperature"] == 50, wh
@@ -167,6 +171,12 @@ async def main(flaky_gateway: bool):
         assert diag["data"]["items"], diag
         import json
         assert "password" not in json.dumps(diag)  # serialisable, no credentials
+
+        await hass.services.async_call(
+            "climate", "set_temperature",
+            {"entity_id": "climate.mira", "temperature": 55}, blocking=True)
+        assert device.get_heating_flow_temp_value(1) == 55
+        assert hass.states.get("climate.mira").attributes["temperature"] == 55
 
         # Heating off keeps hot water: plant mode Summer, not OFF.
         await hass.services.async_call(
