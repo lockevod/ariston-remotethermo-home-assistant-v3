@@ -22,12 +22,9 @@ Changes in 0.20.0:
 - Heating can be switched off from the thermostat even when the zone has no
   "Off" mode: Off sets the plant to Summer (hot water stays on). New
   "plant mode" select (Summer / Winter / OFF) to switch the boiler itself.
-- New "central heating" switch. On zones without room sensor (gateway
-  "virtual" thermostat) it raises/lowers the zone comfort temperature to
-  max/min, which makes the gateway send / stop the heat request over the bus:
-  no wired thermostat (TA) needed, plant stays in Winter. Otherwise it
-  switches the plant Winter / Summer. Use it from automations (e.g. follow Tado
-  heating demand) or as the heater of a Generic Thermostat.
+- New "central heating" switch (on = Winter, off = Summer, hot water stays
+  on), handy for seasonal switching from automations. The heat request itself
+  still comes from the room thermostat wired to the TA input.
 - Zones without a room sensor show no current temperature instead of 0 °C.
 - Cloud errors during polling are reported once as a normal "unavailable"
   warning instead of a traceback on every poll.

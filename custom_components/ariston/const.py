@@ -20,7 +20,6 @@ from ariston.const import (
     MenuItemNames,
     NuosSplitProperties,
     PlantMode,
-    ZoneMode,
     SeDeviceSettings,
     SlpDeviceSettings,
     SystemType,
@@ -93,56 +92,16 @@ def heating_off_plant_mode(device: Any) -> PlantMode:
     return PlantMode.OFF
 
 
-def virtual_zones(device: Any) -> list[int]:
-    """Zones without room sensor, driven by the gateway's virtual thermostat.
-
-    On these zones the heat request comes from the zone comfort temperature
-    (the gateway estimates the room temperature), so no wired thermostat (TA)
-    is needed: comfort at max = heat, comfort at min = no heat.
-    """
-    return [
-        zone.get("num")
-        for zone in getattr(device, "zones", None) or []
-        if zone.get("roomSens") is False
-        and device.get_comfort_temp_value(zone.get("num")) is not None
-    ]
-
-
-def is_heating_on(device: Any) -> bool:
-    """Central heating enabled (and requested, on virtual zones)."""
-    if not device.is_plant_in_heat_mode:
-        return False
-    zones = virtual_zones(device)
-    return not zones or any(
-        device.get_comfort_temp_value(z) > device.get_comfort_temp_min(z)
-        for z in zones
-    )
-
-
 async def async_set_heating(device: Any, on: bool) -> None:
-    """Switch central heating on/off.
-
-    Virtual zones: comfort temperature to max/min, plant stays in Winter (hot
-    water untouched). Otherwise: plant mode Winter / Summer.
-    """
-    zones = virtual_zones(device)
-    if on and not device.is_plant_in_heat_mode:
+    """Enable/disable central heating via the plant mode (Winter / Summer)."""
+    if not on:
+        await device.async_set_plant_mode(heating_off_plant_mode(device))
+    elif not device.is_plant_in_heat_mode:
         options = device.plant_mode_options or []
         await device.async_set_plant_mode(
             PlantMode.WINTER
             if PlantMode.WINTER.value in options or not options
             else PlantMode.HEATING_ONLY
-        )
-    if not zones:
-        if not on:
-            await device.async_set_plant_mode(heating_off_plant_mode(device))
-        return
-    for zone in zones:
-        if on and device.is_zone_in_time_program_mode(zone):
-            await device.async_set_zone_mode(ZoneMode.MANUAL, zone)
-        await device.async_set_comfort_temp(
-            device.get_comfort_temp_max(zone) if on else device.get_comfort_temp_min(zone),
-            zone,
         )
 
 
@@ -691,13 +650,13 @@ ARISTON_BINARY_SENSOR_TYPES: list[AristonBinarySensorEntityDescription] = [
 
 ARISTON_SWITCH_TYPES: list[AristonSwitchEntityDescription] = [
     AristonSwitchEntityDescription(
-        # Lets HA drive heating (e.g. from Tado demand) without a wired
-        # thermostat: see async_set_heating.
+        # Lets HA act as the room thermostat (e.g. generic_thermostat with any
+        # temperature sensor) when no wired thermostat drives the boiler.
         key="CentralHeating",
         name=f"{NAME} central heating",
         icon="mdi:radiator",
         set_value=lambda entity, value: async_set_heating(entity.device, value),
-        get_is_on=lambda entity: is_heating_on(entity.device),
+        get_is_on=lambda entity: entity.device.is_plant_in_heat_mode,
         system_types=[SystemType.GALEVO],
     ),
     AristonSwitchEntityDescription(
