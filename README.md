@@ -26,6 +26,10 @@ Changes in 0.20.0:
   on), handy for seasonal switching from automations. The heat request itself
   still comes from the room thermostat wired to the TA input.
 - Zones without a room sensor show no current temperature instead of 0 °C.
+- Writes are verified: if after the next poll the boiler still shows the value
+  it had before a write (the cloud accepted it but the boiler dropped it), the
+  write is resent, at most twice. A value changed by someone else meanwhile is
+  left alone.
 - Cloud errors during polling are reported once as a normal "unavailable"
   warning instead of a traceback on every poll.
 - Climate and water heater provide the `native_*` temperature API of

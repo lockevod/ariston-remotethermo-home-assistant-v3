@@ -5,10 +5,18 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import timedelta
 import logging
+import time
+from typing import Any
 
 from ariston.ariston_api import AristonAPI, ConnectionException
 from ariston.base_device import AristonBaseDevice
-from ariston.const import ARISTON_DATA_ITEMS, ARISTON_REMOTE, DeviceFeatures, ZoneAttribute
+from ariston.const import (
+    ARISTON_DATA_ITEMS,
+    ARISTON_REMOTE,
+    DeviceFeatures,
+    PropertyType,
+    ZoneAttribute,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -39,6 +47,7 @@ class DeviceDataUpdateCoordinator(DataUpdateCoordinator):
 
         self.device = device
         self._async_update_state = async_update_state
+        self.after_update: Callable | None = None
 
     async def _async_update(self) -> None:
         """Fetch data; cloud errors are expected, not crashes."""
@@ -46,6 +55,75 @@ class DeviceDataUpdateCoordinator(DataUpdateCoordinator):
             await self._async_update_state()
         except ConnectionException as error:
             raise UpdateFailed(f"Ariston cloud error: {error}") from error
+        if self.after_update:
+            await self.after_update()
+
+
+WRITE_RETRIES = 2
+WRITE_SETTLE_SECONDS = 60
+
+
+def _same(a: Any, b: Any) -> bool:
+    try:
+        return abs(float(a) - float(b)) < 0.01
+    except (TypeError, ValueError):
+        return a == b
+
+
+def verify_writes(coordinator: DeviceDataUpdateCoordinator) -> None:
+    """Re-send a write the boiler silently dropped.
+
+    The cloud sometimes accepts a dataItems/set but the boiler keeps the old
+    value. After each poll, a write still showing the value it had *before* the
+    write is sent again (max WRITE_RETRIES), with the fresh cloud value as
+    prevValue. A value changed by someone else in between is left alone.
+    """
+    device = coordinator.device
+    if not hasattr(device, "async_set_item_by_id") or not hasattr(
+        device, "_get_item_by_id"
+    ):
+        return
+    send = device.async_set_item_by_id
+    pending: dict[tuple[str, int], dict[str, Any]] = {}
+
+    def cloud_value(item_id: str, zone: int) -> Any:
+        return device._get_item_by_id(item_id, PropertyType.VALUE, zone)
+
+    async def tracked_set(item_id: str, value: float, zone_number: int = 0) -> None:
+        before = cloud_value(item_id, zone_number)
+        await send(item_id, value, zone_number)
+        pending[(item_id, zone_number)] = {
+            "value": value, "before": before, "retries": 0, "at": time.monotonic()
+        }
+
+    async def check() -> None:
+        for key, write in list(pending.items()):
+            now = cloud_value(*key)
+            if _same(now, write["value"]) or not _same(now, write["before"]):
+                pending.pop(key)  # applied, or changed by someone else
+                continue
+            if time.monotonic() - write["at"] < WRITE_SETTLE_SECONDS:
+                continue  # give the boiler time to report it
+            if write["retries"] >= WRITE_RETRIES:
+                _LOGGER.warning(
+                    "Boiler did not apply %s=%s (zone %s), giving up",
+                    key[0], write["value"], key[1],
+                )
+                pending.pop(key)
+                continue
+            write["retries"] += 1
+            write["at"] = time.monotonic()
+            _LOGGER.info(
+                "Boiler did not apply %s=%s (zone %s), resending (%s/%s)",
+                key[0], write["value"], key[1], write["retries"], WRITE_RETRIES,
+            )
+            try:
+                await send(key[0], write["value"], key[1])
+            except ConnectionException as error:
+                _LOGGER.debug("Resend failed: %s", error)
+
+    device.async_set_item_by_id = tracked_set
+    coordinator.after_update = check
 
 
 def drop_hidden_zones(device: AristonBaseDevice) -> None:

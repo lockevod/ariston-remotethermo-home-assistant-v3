@@ -43,6 +43,7 @@ from .coordinator import (
     DeviceDataUpdateCoordinator,
     drop_hidden_zones,
     use_chunked_properties_fallback,
+    verify_writes,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -138,6 +139,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry.unique_id, {COORDINATOR: {}, ENERGY_COORDINATOR: {}}
         )
         hass.data[DOMAIN][entry.unique_id][COORDINATOR] = coordinator
+        verify_writes(coordinator)
 
         await coordinator.async_config_entry_first_refresh()
 
