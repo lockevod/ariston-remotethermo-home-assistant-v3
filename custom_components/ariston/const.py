@@ -19,6 +19,7 @@ from ariston.const import (
     MedDeviceSettings,
     MenuItemNames,
     NuosSplitProperties,
+    PlantMode,
     SeDeviceSettings,
     SlpDeviceSettings,
     SystemType,
@@ -908,6 +909,21 @@ ARISTON_NUMBER_TYPES: list[AristonNumberEntityDescription] = [
 ]
 
 ARISTON_SELECT_TYPES: list[AristonSelectEntityDescription] = [
+    AristonSelectEntityDescription(
+        key=DeviceProperties.PLANT_MODE,
+        name=f"{NAME} plant mode",
+        icon="mdi:water-boiler",
+        get_current_option=lambda entity: entity.device.plant_mode_text,
+        get_options=lambda entity: entity.device.plant_mode_opt_texts,
+        select_option=lambda entity, option: entity.device.async_set_plant_mode(
+            PlantMode(
+                entity.device.plant_mode_options[
+                    entity.device.plant_mode_opt_texts.index(option)
+                ]
+            )
+        ),
+        system_types=[SystemType.GALEVO],
+    ),
     AristonSelectEntityDescription(
         key=ConsumptionProperties.CURRENCY,
         name=f"{NAME} currency",

@@ -19,6 +19,10 @@ Changes in 0.20.0:
   smaller data request.
 - Debug logs no longer contain the session token, account details (name,
   e-mail, phone), address/GPS or gateway serial that the ariston library logs.
+- Heating can be switched off from the thermostat even when the zone has no
+  "Off" mode: Off sets the plant to Summer (hot water stays on). New
+  "plant mode" select (Summer / Winter / OFF) to switch the boiler itself.
+- Zones without a room sensor show no current temperature instead of 0 °C.
 - Cloud errors during polling are reported once as a normal "unavailable"
   warning instead of a traceback on every poll.
 - Climate and water heater provide the `native_*` temperature API of

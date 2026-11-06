@@ -113,8 +113,15 @@ class AristonThermostat(AristonEntity, ClimateEntity):
         return self.device.get_target_temp_step(self.zone)
 
     @property
-    def native_current_temperature(self) -> float:
+    def native_current_temperature(self) -> float | None:
         """Return the reported current temperature for the device."""
+        zone = next(
+            (z for z in getattr(self.device, "zones", None) or []
+             if z.get("num") == self.zone),
+            {},
+        )
+        if zone.get("roomSens") is False:
+            return None  # no room sensor: the cloud reports a meaningless 0.0
         return self.device.get_measured_temp_value(self.zone)
 
     @property
@@ -170,7 +177,13 @@ class AristonThermostat(AristonEntity, ClimateEntity):
                     supported_modes.append(HVACMode.COOL)
         if self.device.is_zone_mode_options_contains_time_program(self.zone):
             supported_modes.append(HVACMode.AUTO)
-        if self.device.is_zone_mode_options_contains_off(self.zone):
+        if self.device.is_zone_mode_options_contains_off(self.zone) or (
+            self.device.plant_mode_supported
+            and (
+                PlantMode.SUMMER.value in (self.device.plant_mode_options or [])
+                or self.device.is_plant_mode_options_contains_off
+            )
+        ):
             supported_modes.append(HVACMode.OFF)
 
         return supported_modes
@@ -214,10 +227,14 @@ class AristonThermostat(AristonEntity, ClimateEntity):
             current_plant_mode = self.device.plant_mode
 
             if hvac_mode == HVACMode.OFF:
-                if self.device.is_plant_mode_options_contains_off:
-                    await self.device.async_set_plant_mode(PlantMode.OFF)
-                else:
+                # Heating off. Keep hot water (Summer) when the boiler makes DHW;
+                # the full OFF stays available as a preset / plant mode.
+                if (
+                    self.device.has_dhw and PlantMode.SUMMER.value in plant_modes
+                ) or not self.device.is_plant_mode_options_contains_off:
                     await self.device.async_set_plant_mode(PlantMode.SUMMER)
+                else:
+                    await self.device.async_set_plant_mode(PlantMode.OFF)
             elif hvac_mode == HVACMode.AUTO:
                 if current_plant_mode in [
                     PlantMode.WINTER,

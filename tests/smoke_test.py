@@ -46,7 +46,7 @@ def _item(id_, value, zone=0, **kw):
 def _api(flaky_gateway: bool):
     api = AsyncMock()
     api.async_get_features_for_device.return_value = {
-        DeviceFeatures.ZONES: [{"num": 1}, {"num": 2, "isHidden": True}],
+        DeviceFeatures.ZONES: [{"num": 1, "roomSens": False}, {"num": 2, "isHidden": True}],
         DeviceFeatures.HAS_BOILER: True,
         DeviceFeatures.HAS_METERING: True,
     }
@@ -54,12 +54,13 @@ def _api(flaky_gateway: bool):
         _item(DeviceProperties.DHW_TEMP, 50),
         _item(DeviceProperties.DHW_MODE, 0, options=[0, 1], optTexts=["Comfort", "Eco"]),
         _item(DeviceProperties.PLANT_MODE, 1, options=[0, 1, 5],
-              optTexts=["Summer", "Winter", "Off"]),
-        _item(ThermostatProperties.ZONE_MEASURED_TEMP, 20.5, zone=1),
+              optTexts=["Summer", "Winter", "OFF"]),
+        _item(ThermostatProperties.ZONE_MEASURED_TEMP, 0.0, zone=1),  # no room sensor
         _item(ThermostatProperties.ZONE_DESIRED_TEMP, 21, zone=1),
         _item(ThermostatProperties.ZONE_COMFORT_TEMP, 21, zone=1, min=10, max=30),
-        _item(ThermostatProperties.ZONE_MODE, 2, zone=1, options=[0, 1, 2],
-              optTexts=["Off", "Time", "Manual"]),
+        # Real Chaffoteaux Mira Link: no "Off" zone mode
+        _item(ThermostatProperties.ZONE_MODE, 2, zone=1, options=[2, 3],
+              optTexts=["Manual", "Time program"]),
     ]}
     if flaky_gateway:
         # Cloud behaviour from fustom issue 492: big batches fail, PlantMode only
@@ -140,7 +141,8 @@ async def main(flaky_gateway: bool):
         assert climate, sorted(hass.states.async_entity_ids())
         assert len(hass.states.async_entity_ids("climate")) == 1, "hidden zone shown"
         assert climate.attributes["preset_mode"] == "Winter", climate
-        assert climate.attributes["current_temperature"] == 20.5, climate
+        assert climate.attributes["current_temperature"] is None, climate
+        assert "off" in climate.attributes["hvac_modes"], climate
         assert climate.attributes["temperature"] == 21, climate
 
         wh = hass.states.get("water_heater.mira")
@@ -165,6 +167,26 @@ async def main(flaky_gateway: bool):
         assert diag["data"]["items"], diag
         import json
         assert "password" not in json.dumps(diag)  # serialisable, no credentials
+
+        # Heating off keeps hot water: plant mode Summer, not OFF.
+        await hass.services.async_call(
+            "climate", "set_hvac_mode",
+            {"entity_id": "climate.mira", "hvac_mode": "off"}, blocking=True)
+        assert hass.states.get("climate.mira").state == "off"
+        assert device.plant_mode.value == 0, device.plant_mode
+        await hass.services.async_call(
+            "climate", "set_hvac_mode",
+            {"entity_id": "climate.mira", "hvac_mode": "heat"}, blocking=True)
+        assert hass.states.get("climate.mira").state == "heat"
+
+        plant = [s for s in hass.states.async_all("select") if "plant_mode" in s.entity_id]
+        assert plant and plant[0].state == "Winter", plant
+        await hass.services.async_call(
+            "select", "select_option",
+            {"entity_id": plant[0].entity_id, "option": "OFF"}, blocking=True)
+        assert hass.states.get(plant[0].entity_id).state == "OFF"
+        assert device.plant_mode.value == 5
+        assert hass.states.get("climate.mira").state == "off"
 
         # The library debug-logs the login response; it must come out redacted.
         api_log = logging.getLogger("ariston.ariston_api")
