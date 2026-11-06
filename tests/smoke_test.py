@@ -135,6 +135,16 @@ async def main():
         device.api.async_set_property.assert_awaited()
         assert hass.states.get("water_heater.mira").attributes["temperature"] == 55
 
+        from custom_components.ariston.diagnostics import (
+            async_get_config_entry_diagnostics,
+        )
+        diag = await async_get_config_entry_diagnostics(hass, entry)
+        assert diag["attributes"]["gw"] == "**REDACTED**", diag["attributes"]
+        assert diag["attributes"]["name"] == "**REDACTED**"
+        assert diag["data"]["items"], diag
+        import json
+        assert "password" not in json.dumps(diag)  # serialisable, no credentials
+
         assert await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_stop()
 

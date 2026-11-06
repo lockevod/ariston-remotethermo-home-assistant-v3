@@ -21,6 +21,8 @@ Changes in 0.20.0:
 - Parameters your boiler does not report no longer create broken number
   entities.
 - Device and entry fall back to "Ariston" when the cloud returns an empty name.
+- Diagnostics download (device page → ⋮ → Download diagnostics) with
+  credentials, gateway serial, location and plant name redacted.
 
 Install with HACS: *HACS → ⋮ → Custom repositories →*
 `https://github.com/lockevod/ariston-remotethermo-home-assistant-v3`
