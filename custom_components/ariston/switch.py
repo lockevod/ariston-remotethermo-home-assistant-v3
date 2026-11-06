@@ -62,9 +62,9 @@ class AristonSwitch(AristonEntity, SwitchEntity):
     async def async_turn_on(self, **kwargs) -> None:
         """Turn the switch on."""
         await self.entity_description.set_value(self, True)
-        self.async_write_ha_state()
+        self.coordinator.async_update_listeners()
 
     async def async_turn_off(self, **kwargs) -> None:
         """Turn the device off."""
         await self.entity_description.set_value(self, False)
-        self.async_write_ha_state()
+        self.coordinator.async_update_listeners()

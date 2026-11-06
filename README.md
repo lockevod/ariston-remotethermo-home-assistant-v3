@@ -1,3 +1,35 @@
+# Ariston NET / Chaffolink — maintained fork
+
+Fork of [fustom/ariston-remotethermo-home-assistant-v3](https://github.com/fustom/ariston-remotethermo-home-assistant-v3)
+with fixes for current Home Assistant and the current Ariston cloud. Chaffoteaux
+**Chaffolink** uses the same remotethermo cloud and has been reported working:
+log in with your Chaffolink e-mail and password and keep the default API URL.
+
+**Requires Home Assistant 2026.11 or newer.**
+
+Changes in 0.20.0:
+- Setup no longer fails when the cloud answers HTTP 500 on the `busErrors` or
+  energy endpoints (upstream issues 497, 503, 509). Those sensors stay unavailable
+  until the endpoint recovers; climate and hot water work normally.
+- Cloud errors during polling are reported once as a normal "unavailable"
+  warning instead of a traceback on every poll.
+- Climate and water heater use the `native_*` temperature API required by
+  HA 2026.11 (the old one stops working in 2027.11).
+- After changing a setting, every entity of the boiler updates at once
+  (e.g. setting DHW temperature from the water heater also updates the DHW
+  number entity) instead of waiting for the next poll.
+- Parameters your boiler does not report no longer create broken number
+  entities.
+- Device and entry fall back to "Ariston" when the cloud returns an empty name.
+
+Install with HACS: *HACS → ⋮ → Custom repositories →*
+`https://github.com/lockevod/ariston-remotethermo-home-assistant-v3`
+(type *Integration*), install, restart, then *Settings → Devices & services →
+Add integration → Ariston*. If you had the upstream version installed, remove it
+from HACS first (same `ariston` domain; your config entry is kept).
+
+---
+
 # 🚀 Co-Maintainers Wanted!
 
 Hello everyone! 

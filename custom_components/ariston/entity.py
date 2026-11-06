@@ -6,12 +6,13 @@ from abc import ABC
 import logging
 
 from ariston.const import WheType
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DOMAIN,
     EXTRA_STATE_ATTRIBUTE,
+    NAME,
     EXTRA_STATE_DEVICE_METHOD,
     AristonBaseEntityDescription,
 )
@@ -42,7 +43,7 @@ class AristonEntity(CoordinatorEntity, ABC):
         return DeviceInfo(
             identifiers={(DOMAIN, self.device.serial_number or "")},
             manufacturer=DOMAIN,
-            name=self.device.name,
+            name=self.device.name or NAME,
             sw_version=self.device.firmware_version,
             model=self.model,
         )

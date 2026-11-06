@@ -1,8 +1,5 @@
 {
-  "name": "Ariston NET",
-  "zip_release": true,
-  "hide_default_branch": true,
+  "name": "Ariston NET (Chaffolink fork)",
   "render_readme": true,
-  "homeassistant": "2023.1.1",
-  "filename": "ariston-remotethermo-home-assistant-v3.zip"
+  "homeassistant": "2026.11.0"
 }

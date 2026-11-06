@@ -15,7 +15,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE
 from homeassistant.core import HomeAssistant
 
-from .const import ARISTON_CLIMATE_TYPES, DOMAIN, AristonClimateEntityDescription
+from .const import (
+    ARISTON_CLIMATE_TYPES,
+    DOMAIN,
+    NAME,
+    AristonClimateEntityDescription,
+)
 from .coordinator import DeviceDataUpdateCoordinator
 from .entity import AristonEntity
 
@@ -68,7 +73,7 @@ class AristonThermostat(AristonEntity, ClimateEntity):
     @property
     def name(self) -> str:
         """Return the name of the device."""
-        return f"{self.device.name}"
+        return self.device.name or NAME
 
     @property
     def unique_id(self) -> str:
@@ -83,7 +88,7 @@ class AristonThermostat(AristonEntity, ClimateEntity):
         return "mdi:radiator-off"
 
     @property
-    def temperature_unit(self) -> str:
+    def native_temperature_unit(self) -> str:
         """Return the temperature units for the device."""
         return self.device.get_measured_temp_unit(self.zone)
 
@@ -108,12 +113,12 @@ class AristonThermostat(AristonEntity, ClimateEntity):
         return self.device.get_target_temp_step(self.zone)
 
     @property
-    def current_temperature(self) -> float:
+    def native_current_temperature(self) -> float:
         """Return the reported current temperature for the device."""
         return self.device.get_measured_temp_value(self.zone)
 
     @property
-    def target_temperature(self) -> float:
+    def native_target_temperature(self) -> float:
         """Return the target temperature for the device."""
         return self.device.get_target_temp_value(self.zone)
 
@@ -258,7 +263,7 @@ class AristonThermostat(AristonEntity, ClimateEntity):
         elif hvac_mode == HVACMode.HEAT:
             await self.device.async_set_zone_mode(BsbZoneMode.MANUAL, self.zone)
 
-        self.async_write_ha_state()
+        self.coordinator.async_update_listeners()
 
     async def async_set_preset_mode(self, preset_mode):
         """Set new target preset mode."""
@@ -292,7 +297,7 @@ class AristonThermostat(AristonEntity, ClimateEntity):
 
         # Refresh coordinator to get updated device state
         await self.coordinator.async_request_refresh()
-        self.async_write_ha_state()
+        self.coordinator.async_update_listeners()
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
@@ -307,4 +312,4 @@ class AristonThermostat(AristonEntity, ClimateEntity):
         )
 
         await self.device.async_set_comfort_temp(temperature, self.zone)
-        self.async_write_ha_state()
+        self.coordinator.async_update_listeners()

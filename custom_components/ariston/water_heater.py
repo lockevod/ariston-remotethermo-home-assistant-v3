@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from .const import (
     ARISTON_WATER_HEATER_TYPES,
     DOMAIN,
+    NAME,
     AristonWaterHeaterEntityDescription,
 )
 from .coordinator import DeviceDataUpdateCoordinator
@@ -62,7 +63,7 @@ class AristonWaterHeater(AristonEntity, WaterHeaterEntity):
     @property
     def name(self) -> str:
         """Return the name of the device."""
-        return self.device.name or ""
+        return self.device.name or NAME
 
     @property
     def unique_id(self) -> str:
@@ -75,7 +76,7 @@ class AristonWaterHeater(AristonEntity, WaterHeaterEntity):
         return "mdi:water-pump"
 
     @property
-    def current_temperature(self):
+    def native_current_temperature(self):
         """Return the temperature."""
         return self.device.water_heater_current_temperature
 
@@ -85,7 +86,7 @@ class AristonWaterHeater(AristonEntity, WaterHeaterEntity):
         return self.device.water_heater_minimum_temperature
 
     @property
-    def target_temperature(self):
+    def native_target_temperature(self):
         """Return the temperature we try to reach."""
         return self.device.water_heater_target_temperature
 
@@ -100,7 +101,7 @@ class AristonWaterHeater(AristonEntity, WaterHeaterEntity):
         return 1 / 10**self.device.water_heater_temperature_decimals
 
     @property
-    def temperature_unit(self):
+    def native_temperature_unit(self):
         """Return the unit of measurement."""
         return self.device.water_heater_temperature_unit
 
@@ -141,17 +142,19 @@ class AristonWaterHeater(AristonEntity, WaterHeaterEntity):
         )
 
         await self.device.async_set_water_heater_temperature(temperature)
-        self.async_write_ha_state()
+        self.coordinator.async_update_listeners()
 
     async def async_set_operation_mode(self, operation_mode):
         """Set operation mode."""
         await self.device.async_set_water_heater_operation_mode(operation_mode)
-        self.async_write_ha_state()
+        self.coordinator.async_update_listeners()
 
     async def async_turn_off(self, **kwargs) -> None:
         """Turn the water heater off."""
         await self.device.async_set_power(False)
+        self.coordinator.async_update_listeners()
 
     async def async_turn_on(self, **kwargs) -> None:
         """Turn the water heater on."""
         await self.device.async_set_power(True)
+        self.coordinator.async_update_listeners()

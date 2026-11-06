@@ -46,7 +46,13 @@ async def async_setup_entry(
             else:
                 ariston_numbers.append(AristonNumber(coordinator, description))
 
-    async_add_entities(ariston_numbers)
+    # Skip parameters the device does not report (no range): they cannot be
+    # set and HA fails to add a number entity without min/max.
+    async_add_entities(
+        number
+        for number in ariston_numbers
+        if number.native_min_value is not None and number.native_max_value is not None
+    )
 
 
 class AristonNumber(AristonEntity, NumberEntity):
@@ -100,4 +106,4 @@ class AristonNumber(AristonEntity, NumberEntity):
     async def async_set_native_value(self, value: float):
         """Update the current value."""
         await self.entity_description.set_native_value(self, value)
-        self.async_write_ha_state()
+        self.coordinator.async_update_listeners()
