@@ -122,6 +122,12 @@ class AristonThermostat(AristonEntity, ClimateEntity):
         """Return the target temperature for the device."""
         return self.device.get_target_temp_value(self.zone)
 
+    # HA < 2026.11 reads the pre-native names; 2026.11+ prefers native_* when
+    # a class provides both, without a deprecation warning.
+    temperature_unit = native_temperature_unit
+    current_temperature = native_current_temperature
+    target_temperature = native_target_temperature
+
     @property
     def supported_features(self) -> int:
         """Return the supported features for this device integration."""

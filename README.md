@@ -5,7 +5,7 @@ with fixes for current Home Assistant and the current Ariston cloud. Chaffoteaux
 **Chaffolink** uses the same remotethermo cloud and has been reported working:
 log in with your Chaffolink e-mail and password and keep the default API URL.
 
-**Requires Home Assistant 2026.11 or newer.**
+**Requires Home Assistant 2026.1 or newer** (tested on 2026.1.3 and 2026.11.0).
 
 Changes in 0.20.0:
 - Setup no longer fails when the cloud answers HTTP 500 on the `busErrors` or
@@ -13,8 +13,9 @@ Changes in 0.20.0:
   until the endpoint recovers; climate and hot water work normally.
 - Cloud errors during polling are reported once as a normal "unavailable"
   warning instead of a traceback on every poll.
-- Climate and water heater use the `native_*` temperature API required by
-  HA 2026.11 (the old one stops working in 2027.11).
+- Climate and water heater provide the `native_*` temperature API of
+  HA 2026.11 (the old one stops working in 2027.11) and keep the old names
+  for earlier 2026 releases.
 - After changing a setting, every entity of the boiler updates at once
   (e.g. setting DHW temperature from the water heater also updates the DHW
   number entity) instead of waiting for the next poll.

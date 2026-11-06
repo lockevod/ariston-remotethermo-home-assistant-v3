@@ -105,6 +105,12 @@ class AristonWaterHeater(AristonEntity, WaterHeaterEntity):
         """Return the unit of measurement."""
         return self.device.water_heater_temperature_unit
 
+    # HA < 2026.11 reads the pre-native names; 2026.11+ prefers native_* when
+    # a class provides both, without a deprecation warning.
+    temperature_unit = native_temperature_unit
+    current_temperature = native_current_temperature
+    target_temperature = native_target_temperature
+
     @property
     def supported_features(self) -> int:
         """Return the supported features for this device integration."""
