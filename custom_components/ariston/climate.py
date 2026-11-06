@@ -94,64 +94,40 @@ class AristonThermostat(AristonEntity, ClimateEntity):
         return self.device.get_measured_temp_unit(self.zone)
 
     @property
-    def _flow_mode(self) -> bool:
-        """Zone without room sensor: the thermostat drives the CH flow temperature.
-
-        Without a room sensor the zone comfort temperature does nothing; what the
-        boiler regulates is the heating water (flow) temperature, the same value
-        as the CH knob on the boiler.
-        """
-        zone = next(
-            (z for z in getattr(self.device, "zones", None) or []
-             if z.get("num") == self.zone),
-            {},
-        )
-        return (
-            zone.get("roomSens") is False
-            and hasattr(self.device, "get_heating_flow_temp_value")
-            and self.device.get_heating_flow_temp_value(self.zone) is not None
-        )
-
-    @property
     def precision(self) -> float:
         """Return the precision of temperature for the device."""
-        if self._flow_mode:
-            return 1 / 10 ** (self.device.get_heating_flow_temp_decimals(self.zone) or 0)
         return 1 / 10 ** self.device.get_measured_temp_decimals(self.zone)
 
     @property
     def min_temp(self):
         """Return minimum temperature."""
-        if self._flow_mode:
-            return self.device.get_heating_flow_temp_min(self.zone)
         return self.device.get_comfort_temp_min(self.zone)
 
     @property
     def max_temp(self):
         """Return the maximum temperature."""
-        if self._flow_mode:
-            return self.device.get_heating_flow_temp_max(self.zone)
         return self.device.get_comfort_temp_max(self.zone)
 
     @property
     def target_temperature_step(self) -> float:
         """Return the target temperature step support by the device."""
-        if self._flow_mode:
-            return self.device.get_heating_flow_temp_step(self.zone)
         return self.device.get_target_temp_step(self.zone)
 
     @property
     def native_current_temperature(self) -> float | None:
         """Return the reported current temperature for the device."""
-        if self._flow_mode:
-            return self.device.ch_flow_temp_value
+        zone = next(
+            (z for z in getattr(self.device, "zones", None) or []
+             if z.get("num") == self.zone),
+            {},
+        )
+        if zone.get("roomSens") is False:
+            return None  # no room sensor: the cloud reports a meaningless 0.0
         return self.device.get_measured_temp_value(self.zone)
 
     @property
     def native_target_temperature(self) -> float:
         """Return the target temperature for the device."""
-        if self._flow_mode:
-            return self.device.get_heating_flow_temp_value(self.zone)
         return self.device.get_target_temp_value(self.zone)
 
     # HA < 2026.11 reads the pre-native names; 2026.11+ prefers native_* when
@@ -355,8 +331,5 @@ class AristonThermostat(AristonEntity, ClimateEntity):
             self.name,
         )
 
-        if self._flow_mode:
-            await self.device.async_set_heating_flow_temp(temperature, self.zone)
-        else:
-            await self.device.async_set_comfort_temp(temperature, self.zone)
+        await self.device.async_set_comfort_temp(temperature, self.zone)
         self.coordinator.async_update_listeners()
